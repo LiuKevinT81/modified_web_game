@@ -1,0 +1,1261 @@
+<link rel="stylesheet" type="text/css" href="gamestyle.css">
+
+<div class="info">
+  <h1>Blue Ship</h1>
+  <p>Use [A][S][W][D] to MOVE and [SPACE] to SHOOT</p>
+  <p id="bluelives"></p>
+</div>
+
+<div class="info" id="red">
+  <h1>Red Ship</h1>
+  <p>Use [&larr;][&uarr;][&darr;][&rarr;] to MOVE and [ENTER] to SHOOT</p>
+  <p id="redlives"></p>
+</div>
+
+<div id="round"></div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+// ORIGINAL GAME: https://codepen.io/jeffibacache/pen/bzBsp
+
+
+// setting up classes
+
+var Pool = (function()
+{
+	//exposed methods:
+
+	var create = function(type, size)
+	{
+		var obj = Object.create(def);
+		obj.init(type, size);
+
+		return obj;
+	};
+
+	//Ship definition:
+
+	var def =
+	{
+		_type: null,
+		_size: null,
+		_pointer: null,
+		_elements:null,
+
+		init: function(type, size)
+		{
+			this._type = type;
+			this._size = size;
+			this._pointer = size;
+			this._elements = [];
+
+			var i = 0;
+			var length = this._size;
+
+			for(i; i < length; ++i)
+			{
+				this._elements[i] = this._type.create();
+			}
+		},
+
+		getElement: function()
+		{
+			if(this._pointer > 0) return this._elements[--this._pointer];
+
+			return null;
+		},
+
+		disposeElement: function(obj)
+		{
+			this._elements[this._pointer++] = obj;
+		}
+	};
+
+	return {create:create};
+}());
+
+var Vec2D = (function()
+{
+	//exposed methods:
+
+	var create = function(x, y)
+	{
+		var obj = Object.create(def);
+		obj.setXY(x, y);
+
+		return obj;
+	};
+
+	//Vec2D definition:
+
+	var def =
+	{
+		_x: 1,
+		_y: 0,
+
+		getX: function()
+		{
+			return this._x;
+		},
+
+		setX: function(value)
+		{
+			this._x = value;
+		},
+
+		getY: function()
+		{
+			return this._y;
+		},
+
+		setY: function(value)
+		{
+			this._y = value;
+		},
+
+		setXY: function(x, y)
+		{
+			this._x = x;
+			this._y = y;
+		},
+
+		getLength: function()
+		{
+			return Math.sqrt(this._x * this._x + this._y * this._y);
+		},
+
+		setLength: function(length)
+		{
+			var angle = this.getAngle();
+			this._x = Math.cos(angle) * length;
+			this._y = Math.sin(angle) * length;
+		},
+
+		getAngle: function()
+		{
+			return Math.atan2(this._y, this._x);
+		},
+
+		setAngle: function(angle)
+		{
+			var length = this.getLength();
+			this._x = Math.cos(angle) * length;
+			this._y = Math.sin(angle) * length;
+		},
+
+		add: function(vector)
+		{
+			this._x += vector.getX();
+			this._y += vector.getY();
+		},
+
+		sub: function(vector)
+		{
+			this._x -= vector.getX();
+			this._y -= vector.getY();
+		},
+
+		mul: function(value)
+		{
+			this._x *= value;
+			this._y *= value;
+		},
+
+		div: function(value)
+		{
+			this._x /= value;
+			this._y /= value;
+		}
+	};
+
+	return {create:create};
+}());
+
+var Particle = (function()
+{
+	//exposed methods:
+
+	var create = function()
+	{
+		var obj = Object.create(def);
+		obj.radius = 2;
+		obj.color = '#FFF';
+		obj.lifeSpan = 0;
+		obj.fric = 0.98;
+		obj.pos = Vec2D.create(0, 0);
+		obj.vel = Vec2D.create(0, 0);
+		obj.blacklisted = false;
+
+		return obj;
+	};
+
+	//Ship definition:
+
+	var def =
+	{
+		radius: null,
+		color: null,
+		lifeSpan: null,
+		fric: null,
+		pos: null,
+		vel: null,
+		blacklisted: null,
+
+		update: function()
+		{
+			this.pos.add(this.vel);
+			this.vel.mul(this.fric);
+			this.radius -= 0.1;
+
+			if(this.radius < 0.1) this.radius = 0.1;
+
+			if(this.lifeSpan-- < 0)
+			{
+				this.blacklisted = true;
+			}
+		},
+
+		reset: function()
+		{
+			this.blacklisted = false;
+		}
+	};
+
+	return {create:create};
+}());
+
+var Bullet = (function()
+{
+	//exposed methods:
+
+	var create = function()
+	{
+		var obj = Object.create(def);
+		obj.radius = 4;
+		obj.color = '#FFF';
+		obj.pos = Vec2D.create(0, 0);
+		obj.vel = Vec2D.create(0, 0);
+		obj.blacklisted = false;
+
+		return obj;
+	};
+
+	//Bullet definition:
+
+	var def =
+	{
+		radius: null,
+		color: null,
+		pos: null,
+		vel: null,
+		blacklisted: null,
+
+        touchingColor: function (ctx, r, g, b, xpos, ypos) {
+            let pixel = ctx.getImageData(this.pos.getX(), this.pos.getY(), this.radius, this.radius);
+            let data = pixel.data;
+            return (data[0] == r && data[1] == g && data[2] == b);
+        },
+
+		update: function()
+		{
+			this.pos.add(this.vel);
+		},
+
+		reset: function()
+		{
+			this.blacklisted = false;
+		}
+	};
+
+	return {create:create};
+}());
+
+var Ship = (function()
+{
+	//exposed methods:
+
+	var create = function(x, y, ref)
+	{
+		var obj = Object.create(def);
+		obj.ref = ref;
+		obj.angle = 3 * Math.PI / 4;
+		obj.pos = Vec2D.create(0, 0);
+		obj.vel = Vec2D.create(0, 0);
+		obj.thrust = Vec2D.create(0, 0);
+		obj.idle = false;
+		obj.radius = 8;
+		obj.idleDelay = 0;
+    obj.fillStyle = "#ff0000";
+		return obj;
+	};
+
+	var def =
+	{
+		angle: null,
+		pos: null,
+		vel: null,
+		thrust: null,
+		ref: null,
+		bulletDelay: null,
+		idle: null,
+		radius: null,
+    color: "red",
+    lives: 5,
+    shootspeed: 5,
+    multishot: false,
+		update: function()
+		{
+            if (this.touchingColor(context, 255, 255, 255, this.pos.getX() + 10 * Math.cos(this.angle), this.pos.getY() + 10 * Math.sin(this.angle))) {
+                this.pos.setXY(
+                    this.pos.getX() - this.vel.getX(),
+                    this.pos.getY() - this.vel.getY()
+                );
+            } else {
+                this.vel.add(this.thrust);
+                this.pos.add(this.vel);
+            };
+
+			if(this.vel.getLength() > 5) this.vel.setLength(5);
+
+			++this.bulletDelay;
+
+			if(this.idle)
+			{
+				if(++this.idleDelay > 120)
+				{
+					this.idleDelay = 0;
+					this.idle = false;
+
+					this.ref.resetGame();
+				}
+			}
+		},
+
+		shoot: function()
+		{
+			if(this.bulletDelay > ship.shootspeed)
+			{
+        if (ship.multishot){
+          this.ref.generateShot(1, ship.angle);
+          this.ref.generateShot(1, ship.angle + (Math.PI / 6));
+          this.ref.generateShot(1, ship.angle - (Math.PI / 6));
+          this.bulletDelay = 0;
+        } else {
+          this.ref.generateShot(1, ship.angle);
+          this.bulletDelay = 0;
+        }
+			}
+		},
+        touchingColor: function (ctx, r, g, b, xpos, ypos) {
+            let pixel = ctx.getImageData(xpos, ypos, 8, 8);
+            let data = pixel.data;
+            return (data[0] == r && data[1] == g && data[2] == b);
+        }
+	};
+
+	return {create:create};
+}());
+
+var Ship2 = (function()
+{
+	//exposed methods:
+
+	var create = function(x, y, ref)
+	{
+		var obj = Object.create(def);
+		obj.ref = ref;
+		obj.angle = - Math.PI / 4;
+		obj.pos = Vec2D.create(0, 0);
+		obj.vel = Vec2D.create(0, 0);
+		obj.thrust = Vec2D.create(0, 0);
+		obj.idle = false;
+		obj.radius = 8;
+		obj.idleDelay = 0;
+
+		return obj;
+	};
+
+	var def =
+	{
+		angle: null,
+		pos: null,
+		vel: null,
+		thrust: null,
+		ref: null,
+		bulletDelay: null,
+		idle: null,
+		radius: null,
+    color: "lightblue",
+    lives: 5,
+    shootspeed: 5,
+    multishot: false,
+		update: function()
+		{
+            if (this.touchingColor(context, 255, 255, 255, this.pos.getX() + 10 * Math.cos(this.angle), this.pos.getY() + 10 * Math.sin(this.angle))) {
+                this.pos.setXY(
+                    this.pos.getX() - this.vel.getX(),
+                    this.pos.getY() - this.vel.getY()
+                );
+            } else {
+                this.vel.add(this.thrust);
+                this.pos.add(this.vel);
+            };
+
+			if(this.vel.getLength() > 5) this.vel.setLength(5);
+
+			++this.bulletDelay;
+
+			if(this.idle)
+			{
+				if(++this.idleDelay > 120)
+				{
+					this.idleDelay = 0;
+					this.idle = false;
+
+					this.ref.resetGame();
+				}
+			}
+		},
+
+		shoot: function()
+		{
+			if(this.bulletDelay > ship2.shootspeed)
+			{
+        if (ship2.multishot){
+          this.ref.generateShot(2, ship2.angle);
+          this.ref.generateShot(2, ship2.angle + (Math.PI / 6));
+          this.ref.generateShot(2, ship2.angle - (Math.PI / 6));
+          this.bulletDelay = 0;
+        } else {
+          this.ref.generateShot(2, ship2.angle);
+          this.bulletDelay = 0;
+        }
+			}
+		},
+        touchingColor: function (ctx, r, g, b, xpos, ypos) {
+            let pixel = ctx.getImageData(xpos, ypos, 8, 8);
+            let data = pixel.data;
+            return (data[0] == r && data[1] == g && data[2] == b);
+        }
+	};
+
+	return {create:create};
+}());
+
+
+var canvas;
+var context;
+var screenWidth;
+var screenHeight;
+var doublePI = Math.PI * 2;
+
+//game vars
+
+var ship;
+var ship2;
+
+var particlePool;
+var particles;
+
+var bulletPool;
+var bullets;
+
+var explosionSound;
+var powerupSound;
+
+var hScan;
+
+//keyboard vars
+
+var keyLeft = false;
+var keyUp = false;
+var keyRight = false;
+var keyDown = false;
+var keyEnter = false;
+
+var keyA = false;
+var keyW = false;
+var keyD = false;
+var keyS = false;
+var keySpace = false;
+let round = 0;
+let gamedone = false;
+
+window.getAnimationFrame =
+window.requestAnimationFrame ||
+window.webkitRequestAnimationFrame ||
+window.mozRequestAnimationFrame ||
+window.oRequestAnimationFrame ||
+window.msRequestAnimationFrame ||
+function(callback)
+{
+	window.setTimeout(callback, 16.6);
+};
+
+window.onload = function() // initlal function to start game
+{
+	canvas = document.getElementById('canvas');
+	context = canvas.getContext('2d');
+
+	window.onresize();
+
+	keyboardInit(); // setup keyboard commands
+	particleInit(); // set up particles
+	bulletInit(); // set up bullets
+	shipInit(); // set up ships
+    explosionSound = new sound("audio/explosion.mp3");
+    powerupSound = new sound("audio/powerup.mp3")
+
+    resetGame(); // initial reset to start game
+	loop(); // infinite loop to run game
+};
+
+window.onresize = function() // screen resizing
+{
+	if(!canvas) return;
+
+	screenWidth = canvas.clientWidth;
+	screenHeight = canvas.clientHeight;
+
+	canvas.width = screenWidth;
+	canvas.height = screenHeight;
+
+	hScan = (screenHeight / 4) >> 0;
+};
+
+function keyboardInit() // setup keyboard commands function
+{
+	window.onkeydown = function(e)
+	{
+		switch(e.keyCode)
+		{
+			//key LEFT
+			case 37:
+
+			keyLeft = true;
+
+			break;
+
+			//key UP
+			case 38:
+
+			keyUp = true;
+
+			break;
+
+			//key RIGHT
+			case 39:
+
+			keyRight = true;
+
+			break;
+
+			//key DOWN
+			case 40:
+
+			keyDown = true;
+
+			break;
+
+			//key ENTER
+            case 13:
+
+			keyEnter = true;
+
+			break;
+                //key A
+			case 65:
+
+			keyA = true;
+
+			break;
+
+			//key W
+			case 87:
+
+			keyW = true;
+
+			break;
+
+			//key D
+			case 68:
+
+			keyD = true;
+
+			break;
+
+			//key S
+			case 83:
+
+			keyS = true;
+
+			break;
+
+			//key Space
+			case 32:
+
+			keySpace = true;
+
+			break;
+		}
+
+
+    e.preventDefault();
+    }
+
+	window.onkeyup = function(e)
+	{
+		switch(e.keyCode)
+		{
+			//key LEFT
+			case 37:
+
+			keyLeft = false;
+
+			break;
+
+			//key UP
+			case 38:
+
+			keyUp = false;
+
+			break;
+
+			//key RIGHT
+			case 39:
+
+			keyRight = false;
+
+			break;
+
+			//key DOWN
+			case 40:
+
+			keyDown = false;
+
+			break;
+
+			//key ENTER
+            case 13:
+
+			keyEnter = false;
+
+			break;
+
+            //key A
+			case 65:
+
+			keyA = false;
+
+			break;
+
+			//key W
+			case 87:
+
+			keyW = false;
+
+			break;
+
+			//key D
+			case 68:
+
+			keyD = false;
+
+			break;
+
+			//key S
+			case 83:
+
+			keyS = false;
+
+			break;
+
+			//key Space
+			case 32:
+
+			keySpace = false;
+
+			break;
+		}
+
+
+    e.preventDefault();
+	};
+
+}
+
+function sound(src) {
+  this.sound = document.createElement("audio");
+  this.sound.src = src;
+  this.sound.setAttribute("preload", "auto");
+  this.sound.setAttribute("controls", "none");
+  this.sound.style.display = "none";
+  document.body.appendChild(this.sound);
+  this.play = function(){
+    this.sound.play();
+  }
+  this.stop = function(){
+    this.sound.pause();
+  }
+}
+
+
+function particleInit() // set up particles function
+{
+	particlePool = Pool.create(Particle, 100);
+	particles = [];
+}
+
+function bulletInit() // set up bullets function
+{
+	bulletPool = Pool.create(Bullet, 5000);
+	bullets = [];
+}
+
+
+function shipInit() // set up ship function
+{
+	ship = Ship.create(screenWidth >> 1, screenHeight >> 1, this);
+  ship2 = Ship2.create(screenWidth >> 1, screenHeight >> 1, this);
+}
+
+
+
+function updateLives() { // update lives on the html
+    document.getElementById('redlives').innerHTML = ship.lives + " Lives";
+    document.getElementById('bluelives').innerHTML = ship2.lives + " Lives";
+    if (ship.lives == 0) {
+        gameOver("Blue");
+    } else if (ship2.lives == 0) {
+        gameOver("Red");
+    }
+}
+
+function gameOver(winningship) { // ends the game
+    gamedone = true;
+    roundDiv.innerHTML = winningship + " ship wins!";
+    if (winningship == "Red") {
+        roundDiv.style.color = "red";
+    } else if (winningship == "Blue") {
+        roundDiv.style.color = "lightblue";
+    }
+    roundDiv.style.display = "block";
+    // throw new Error("Game Over!"); //Throws an error to kill script execution
+}
+
+function loop() // infinite loop
+{
+  if(gamedone){
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  } else {
+    updateShip();
+    updateParticles();
+    updateBullets();
+
+    checkCollisions();
+
+    render();
+    updateLives();
+    getAnimationFrame(loop);
+    powerupRender();
+  }
+}
+
+function updateShip() // update ship values
+{
+	ship.update();
+  ship2.update();
+
+	if(ship.idle) return;
+
+	if(keyEnter) ship.shoot();
+	if(keyLeft) ship.angle -= 0.1;
+	if(keyRight) ship.angle += 0.1;
+
+	if(keyUp)
+	{
+		ship.thrust.setLength(0.1);
+		ship.thrust.setAngle(ship.angle);
+
+		generateThrustParticle(ship);
+	}
+	else
+	{
+		ship.vel.mul(0.94);
+		ship.thrust.setLength(0);
+	}
+
+	if(ship.pos.getX() > screenWidth) ship.pos.setX(0);
+	else if(ship.pos.getX() < 0) ship.pos.setX(screenWidth);
+
+	if(ship.pos.getY() > screenHeight) ship.pos.setY(0);
+	else if(ship.pos.getY() < 0) ship.pos.setY(screenHeight);
+
+	if(ship2.idle) return;
+
+	if(keySpace) ship2.shoot();
+	if(keyA) ship2.angle -= 0.1;
+	if(keyD) ship2.angle += 0.1;
+
+	if(keyW)
+	{
+		ship2.thrust.setLength(0.1);
+		ship2.thrust.setAngle(ship2.angle);
+
+		generateThrustParticle(ship2);
+	}
+	else
+	{
+		ship2.vel.mul(0.94);
+		ship2.thrust.setLength(0);
+	}
+
+	if(ship2.pos.getX() > screenWidth) ship2.pos.setX(0);
+	else if(ship2.pos.getX() < 0) ship2.pos.setX(screenWidth);
+
+	if(ship2.pos.getY() > screenHeight) ship2.pos.setY(0);
+	else if(ship2.pos.getY() < 0) ship2.pos.setY(screenHeight);
+}
+
+function generateThrustParticle(shipV) // making particles behind ship
+{
+	var p = particlePool.getElement();
+
+	//if the particle pool doesn't have more elements, will return 'null'.
+
+	if(!p) return;
+
+	p.radius = Math.random() * 3 + 2;
+	p.color = shipV.color;
+	p.lifeSpan = 80;
+	p.pos.setXY(shipV.pos.getX() + Math.cos(shipV.angle) * -14, shipV.pos.getY() + Math.sin(shipV.angle) * -14);
+	p.vel.setLength(8 / p.radius);
+	p.vel.setAngle(shipV.angle + (1 - Math.random() * 2) * (Math.PI / 18));
+	p.vel.mul(-1);
+
+	//particles[particles.length] = p; same as: particles.push(p);
+
+	particles[particles.length] = p;
+}
+
+function updateParticles() // making particles fade away
+{
+	var i = particles.length - 1;
+
+	for(i; i > -1; --i)
+	{
+		var p = particles[i];
+
+		if(p.blacklisted)
+		{
+			p.reset();
+
+			particles.splice(particles.indexOf(p), 1);
+			particlePool.disposeElement(p);
+
+			continue;
+		}
+
+		p.update();
+	}
+}
+
+function updateBullets() // move the bullets
+{
+	var i = bullets.length - 1;
+
+	for(i; i > -1; --i)
+	{
+		var b = bullets[i];
+
+		if(b.blacklisted)
+		{
+			b.reset();
+
+			bullets.splice(bullets.indexOf(b), 1);
+			bulletPool.disposeElement(b);
+
+			continue;
+		}
+
+		b.update();
+
+		if(b.pos.getX() > screenWidth) b.blacklisted = true;
+		else if(b.pos.getX() < 0) b.blacklisted = true;
+
+		if(b.pos.getY() > screenHeight) b.blacklisted = true;
+		else if(b.pos.getY() < 0) b.blacklisted = true;
+	}
+}
+
+function checkCollisions() // checks if bullet hits ship
+{
+  var i = bullets.length - 1;
+  for(i; i > -1; --i)
+  {
+    if(bullets.length > 0)
+    {
+      var a = bullets[i];
+      if (a.touchingColor(context, 255, 255, 255, a.pos.getX(), a.pos.getY())) {
+          a.blacklisted = true;
+      }
+      if(checkDistanceCollision(a, ship))
+      {
+        a.blacklisted = true;
+        generateShipExplosion(ship);
+        ship.lives -= 1;
+      }
+      if(checkDistanceCollision(a, ship2))
+      {
+        a.blacklisted = true;
+        generateShipExplosion(ship2);
+        ship2.lives -= 1;
+      }
+    }
+  }
+
+  // checks if ship picks up powerup
+
+  if(purplePowerUp(ship))
+  {
+      powerupSound.play();
+    ship.shootspeed = ship.shootspeed / 2;
+    purplespawn = false;
+    purplex = null;
+    purpley = null;
+  }
+  if(purplePowerUp(ship2))
+  {
+      powerupSound.play();
+    ship2.shootspeed = ship2.shootspeed / 2;
+    purplespawn = false;
+    purplex = null;
+    purpley = null;
+  }
+  if(greenPowerUp(ship))
+  {
+      powerupSound.play();
+    ship.multishot = true;
+    greenspawn = false;
+    greenx = null;
+    greeny = null;
+  }
+  if(greenPowerUp(ship2))
+  {
+      powerupSound.play();
+    ship2.multishot = true;
+    greenspawn = false;
+    greenx = null;
+    greeny = null;
+  }
+}
+
+// returns boolean if ship is on top of a powerup
+
+function greenPowerUp (ship) {
+    let pixel = context.getImageData(ship.pos.getX(), ship.pos.getY(), ship.radius, ship.radius);
+    let data = pixel.data;
+    return (data[0] == 0 && data[1] == 255 && data[2] == 0);
+};
+
+function purplePowerUp (ship) {
+    let pixel = context.getImageData(ship.pos.getX(), ship.pos.getY(), ship.radius, ship.radius);
+    let data = pixel.data;
+    return (data[0] == 255 && data[1] == 20 && data[2] == 147);
+};
+
+function generateShipExplosion(shipV) // blow the ship up on hit
+{
+	var i = 18;
+
+	for(i; i > -1; --i)
+	{
+		var p = particlePool.getElement();
+
+		//if the particle pool doesn't have more elements, will return 'null'.
+
+		if(!p) return;
+
+		p.radius = Math.random() * 6 + 2;
+		p.lifeSpan = 80;
+		p.color = '#FFF';
+		p.vel.setLength(20 / p.radius);
+		p.vel.setAngle(shipV.angle + (1 - Math.random() * 2) * doublePI);
+		p.pos.setXY(shipV.pos.getX() + Math.cos(p.vel.getAngle()) * (shipV.radius * 0.8), shipV.pos.getY() + Math.sin(p.vel.getAngle()) * (shipV.radius * 0.8));
+
+		//particles[particles.length] = p; same as: particles.push(p);
+
+		particles[particles.length] = p;
+        explosionSound.play();
+    resetGame();
+	}
+
+}
+
+function checkDistanceCollision(obj1, obj2) // checks the distance between 2 objects
+{
+	var vx = obj1.pos.getX() - obj2.pos.getX();
+	var vy = obj1.pos.getY() - obj2.pos.getY();
+	var vec = Vec2D.create(vx, vy);
+
+	if(vec.getLength() < obj1.radius + obj2.radius)
+	{
+		return true;
+	}
+	return false;
+}
+
+function render() // render all the objects on the screen
+{
+	context.fillStyle = '#262626';
+	context.globalAlpha = 0.4;
+	context.fillRect(0, 0, screenWidth, screenHeight);
+	context.globalAlpha = 1;
+
+	renderShip(ship);
+  renderShip(ship2);
+	renderParticles();
+	renderBullets();
+	renderScanlines();
+  createWalls();
+}
+
+function renderShip(ship) // spawns the ships in
+{
+	if(ship.idle) return;
+
+	context.save();
+	context.translate(ship.pos.getX() >> 0, ship.pos.getY() >> 0);
+	context.rotate(ship.angle);
+
+  context.fillStyle = ship.color;
+	context.lineWidth = (Math.random() > 0.9) ? 2 : 1;
+	context.beginPath();
+	context.moveTo(10, 0);
+	context.lineTo(-10, -10);
+	context.lineTo(-10, 10);
+	context.lineTo(10, 0);
+  context.fill();
+	context.closePath();
+
+	context.restore();
+}
+
+function renderParticles() // spawns the particles in
+{
+	//inverse for loop = more performance.
+
+	var i = particles.length - 1;
+
+	for(i; i > -1; --i)
+	{
+		var p = particles[i];
+
+		context.beginPath();
+		context.strokeStyle = p.color;
+		context.arc(p.pos.getX() >> 0, p.pos.getY() >> 0, p.radius, 0, doublePI);
+		if(Math.random() > 0.4) context.stroke();
+		context.closePath();
+	}
+}
+
+function renderBullets() // spawns the bullets
+{
+	//inverse for loop = more performance.
+
+	var i = bullets.length - 1;
+
+	for(i; i > -1; --i)
+	{
+		var b = bullets[i];
+
+		context.beginPath();
+		context.fillStyle = b.color;
+		context.arc(b.pos.getX() >> 0, b.pos.getY() >> 0, b.radius, 0, doublePI);
+		if(Math.random() > 0.2) context.fill();
+		context.closePath();
+	}
+}
+
+function renderScanlines() // scan lines to check where bullet goes
+{
+	//inverse for loop = more performance.
+
+	var i = hScan;
+
+	context.globalAlpha = 0.05;
+	context.lineWidth = 1;
+
+	for(i; i > -1; --i)
+	{
+		context.beginPath();
+		context.moveTo(0, i * 4);
+		context.lineTo(screenWidth, i * 4);
+		context.strokeStyle = (Math.random() > 0.0001) ? '#FFF' : '#222';
+		context.stroke();
+	}
+
+	context.globalAlpha = 1;
+}
+
+function createWalls() // makes the walls in the game
+{
+  context.globalAlpha = 1;
+  context.beginPath();
+  context.fillStyle = "#FFFFFF";
+  context.rect(screenWidth / 20, screenHeight / 5, screenWidth / 7, screenHeight / 20);
+  context.rect(screenWidth / 20, 19 * screenHeight / 40, screenWidth / 7, screenHeight / 20);
+  context.rect(screenWidth / 20, 3 * screenHeight / 4, screenWidth / 7, screenHeight / 20);
+  context.rect(3 * screenWidth / 10, screenHeight / 5, screenWidth / 7, screenHeight / 20);
+  context.rect(3 * screenWidth / 10, 3 * screenHeight / 4, screenWidth / 7, screenHeight / 20);
+  context.rect(39 * screenWidth / 70, screenHeight / 5, screenWidth / 7, screenHeight / 20);
+  context.rect(39 * screenWidth / 70, 3 * screenHeight / 4, screenWidth / 7, screenHeight / 20);
+  context.rect(113 * screenWidth / 140, screenHeight / 5, screenWidth / 7, screenHeight / 20);
+  context.rect(113 * screenWidth / 140, 19 * screenHeight / 40, screenWidth / 7, screenHeight / 20);
+  context.rect(113 * screenWidth / 140, 3 * screenHeight / 4, screenWidth / 7, screenHeight / 20);
+  context.rect(3 * screenWidth / 7, 19 * screenHeight / 40, screenWidth / 7, screenHeight / 20);
+  context.rect(193 * screenWidth / 840, screenHeight / 40, screenWidth / 30, screenHeight / 7);
+  context.rect(619 * screenWidth / 840, screenHeight / 40, screenWidth / 30, screenHeight / 7);
+  context.rect(193 * screenWidth / 840, 79 * screenHeight / 280, screenWidth / 30, screenHeight / 7);
+  context.rect(619 * screenWidth / 840, 79 *  screenHeight / 280, screenWidth / 30, screenHeight / 7);
+  context.rect(193 * screenWidth / 840, 161 * screenHeight / 280, screenWidth / 30, screenHeight / 7);
+  context.rect(619 * screenWidth / 840, 161 * screenHeight / 280, screenWidth / 30, screenHeight / 7);
+  context.rect(193 * screenWidth / 840, 233 * screenHeight / 280, screenWidth / 30, screenHeight / 7);
+  context.rect(619 * screenWidth / 840, 233 * screenHeight / 280, screenWidth / 30, screenHeight / 7);
+  context.rect(29 * screenWidth / 60, 3 * screenHeight / 7, screenWidth / 30, screenHeight / 7);
+
+  context.fill();
+  context.closePath();
+}
+
+function getRandomInt(min, max) { // handy function to get a random number between 2 integers
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+};
+
+function spawnOnWhite (xpos, ypos, radius) { // return boolean if spawn coords are on a wall
+    let pixel = context.getImageData(xpos, ypos, radius, radius);
+    let data = pixel.data;
+    return (data[0] == 255 && data[1] == 255 && data[2] == 255);
+}
+
+let greenspawn = false, greenx, greeny, purplespawn = false, purplex, purpley;
+
+function keepspawning(color, x, y) { // spawns the powerups until it gets picked up
+    context.globalAlpha = 1;
+    context.beginPath();
+    context.fillStyle = color;
+    context.arc(x, y, screenHeight / 50, 0, 2 * Math.PI);
+    context.fill();
+    context.closePath();
+};
+
+function powerupRender() { // function to see if its time to spawn a powerup
+    if (greenspawn) {
+        keepspawning("lime", greenx, greeny);
+    };
+    if (purplespawn) {
+        keepspawning("deeppink", purplex, purpley);
+    };
+  let chance = getRandomInt(1, 750); // chance to spawn
+  if (chance == 1) { // spawn a powerup
+    if (getRandomInt(0, 1) == 0 && greenspawn == false) { // green
+        greenspawn = true;
+        let randx, randy;
+        do {
+            randx = getRandomInt(0, screenWidth);
+            randy = getRandomInt(0, screenHeight);
+        } while (spawnOnWhite(randx, randy, screenHeight / 50));
+        greenx = randx;
+        greeny = randy;
+        keepspawning("lime", greenx, greeny);
+    } else { // purple
+        if (purplespawn == false) {
+            purplespawn = true;
+            let randx, randy;
+            do {
+                randx = getRandomInt(0, screenWidth);
+                randy = getRandomInt(0, screenHeight);
+            } while (spawnOnWhite(randx, randy, screenHeight / 50));
+            purplex = randx;
+            purpley = randy;
+            keepspawning("deeppink", purplex, purpley);
+        };
+    };
+  };
+};
+
+function generateShot(shipNum, angle) // shoots bullets from ship
+{
+    let rShip;
+    if (shipNum == 1) {
+        rShip = ship;
+    } else if (shipNum == 2) {
+        rShip = ship2;
+    }
+	var b = bulletPool.getElement();
+
+	//if the bullet pool doesn't have more elements, will return 'null'.
+
+	if(!b) return;
+
+	b.radius = 2;
+  b.color = rShip.color;
+	b.pos.setXY(rShip.pos.getX() + Math.cos(angle) * 14, rShip.pos.getY() + Math.sin(angle) * 14);
+	b.vel.setLength(10);
+	b.vel.setAngle(angle);
+
+	//bullets[bullets.length] = b; same as: bullets.push(b);
+
+	bullets[bullets.length] = b;
+}
+
+let roundDiv = document.getElementById("round");
+
+function resetGame() { // resets variables for a new round
+    if (ship.lives != 0 && ship2.lives != 0) {
+        ship.pos.setXY(3 * (screenWidth >> 1) / 2, 23 * (screenHeight >> 1) / 50);
+        ship.vel.setXY(0, 0);
+        ship2.pos.setXY((screenWidth >> 1) / 2, 77 * (screenHeight >> 1) / 50);
+        ship2.vel.setXY(0, 0);
+        bullets = [];
+        purplespawn = false;
+        purplex = null;
+        purpley = null;
+        greenspawn = false;
+        greenx = null;
+        greeny = null;
+            updateRound();
+    }
+}
+
+let on = false;
+function updateRound() { // update round counter
+    if (!on && !gamedone) {
+        on = true;
+        ship.shootspeed = 5;
+        ship.multishot = false;
+        ship2.shootspeed = 5;
+        ship2.multishot = false;
+        round += 1;
+        roundDiv.innerHTML = "Round " + round;
+        roundDiv.style.display = "block";
+        setTimeout(() => {
+            roundDiv.style.display = "none";
+            on = false;
+        }, 1000);
+    }
+}
+
+</script>
